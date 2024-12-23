@@ -12,20 +12,34 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.time.Duration;
 
 public class HelloWorld {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
 
         Configuration jobConfiguration = new Configuration();
         jobConfiguration.setString(RestOptions.BIND_PORT, "18081");
 
         StreamExecutionEnvironment bsEnv = StreamExecutionEnvironment.createLocalEnvironmentWithWebUI(jobConfiguration);
         EnvironmentSettings bsSettings = EnvironmentSettings.newInstance().useBlinkPlanner().inStreamingMode().build();
+        bsEnv.setParallelism(2);
+
         StreamTableEnvironment bsTableEnv = StreamTableEnvironment.create(bsEnv, bsSettings);
+        // 设置状态后端
+//        bsEnv.setStateBackend(new RocksDBStateBackend(
+//                "file:///Users/xxxxx/ideapro/rocksdb_state_dir", true));
+//        RocksDBStateBackend stateBackend = (RocksDBStateBackend) bsEnv.getStateBackend();
+//        stateBackend.setDbStoragePath("/Users/xxxxx/ideapro/rocksdb_data_dir");
+
+
+        // 设置状态ttl
+        bsTableEnv.getConfig().setIdleStateRetention(Duration.ofMinutes(5));
 
         StatementSet statementSet = bsTableEnv.createStatementSet();
 
-        InputStream resourceAsStream = HelloWorld.class.getClassLoader().getResourceAsStream("sql/sql02_over_window1.sql");
+        InputStream resourceAsStream = HelloWorld.class.getClassLoader()
+                .getResourceAsStream("sql/sql02_over_window1.sql");
+
         if (resourceAsStream == null) {
             throw new RuntimeException("resourceAsStream is null");
         }
@@ -36,12 +50,13 @@ public class HelloWorld {
                 if (StringUtils.isBlank(line)) {
                     continue;
                 }
-                if (line.trim().startsWith("--")) {
+                line = line.trim();
+                if (line.startsWith("--")) {
                     continue;
                 }
-                sb.append(line.trim()).append("\n");
+                sb.append(line).append("\n");
 
-                if (line.trim().endsWith(";")) {
+                if (line.endsWith(";")) {
                     String _sql = sb.toString().trim();
                     String sql = _sql.substring(0, _sql.length() - 1);
                     if (sql.toLowerCase().startsWith("insert")) {

@@ -111,6 +111,14 @@
             <artifactId>log4j-api</artifactId>
             <version>2.17.1</version> <!-- 确保版本与你的项目兼容 -->
         </dependency>
+
+<!--        状态后端 rocksdb -->
+<!--        <dependency>-->
+<!--            <groupId>org.apache.flink</groupId>-->
+<!--            <artifactId>flink-statebackend-rocksdb_${scala.binary.version}</artifactId>-->
+<!--            <version>${flink.version}</version>-->
+<!--        </dependency>-->
+
     </dependencies>
 
 </project>

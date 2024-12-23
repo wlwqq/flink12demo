@@ -1,5 +1,7 @@
 -- 输入数据demo
 -- {"user_name":"wlh", "score": 12, "ts":1}
+-- {"user_name":"wlh", "score": 12, "ts":5}
+-- {"user_name":"wlh", "score": 12, "ts":2}
 
 CREATE TABLE KafkaTable
 (
