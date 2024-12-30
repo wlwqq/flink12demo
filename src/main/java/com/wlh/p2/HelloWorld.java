@@ -38,7 +38,7 @@ public class HelloWorld {
         StatementSet statementSet = bsTableEnv.createStatementSet();
 
         InputStream resourceAsStream = HelloWorld.class.getClassLoader()
-                .getResourceAsStream("sql/sql02_over_window1.sql");
+                .getResourceAsStream("sql/sql03_groupby.sql");
 
         if (resourceAsStream == null) {
             throw new RuntimeException("resourceAsStream is null");

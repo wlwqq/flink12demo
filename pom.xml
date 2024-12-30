@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.kuajing.bg.linkopen.api</groupId>
+    <groupId>com.wlh</groupId>
     <artifactId>flink12demo</artifactId>
     <version>1.0-SNAPSHOT</version>
 
