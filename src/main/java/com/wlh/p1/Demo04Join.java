@@ -1,10 +1,8 @@
 package com.wlh.p1;
 
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.state.StateTtlConfig;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
-import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.functions.KeySelector;
@@ -52,22 +50,24 @@ public class Demo04Join {
     static class MyKeyedCoProcessFunc extends KeyedCoProcessFunction<String, Tuple2<String, String>, Tuple2<String, String>, Tuple3<String, String, String>> {
 
         private ValueState<Tuple2<String, String>> leftState;
+        private ValueState<Long> leftStateTimer;
         private ValueState<Tuple2<String, String>> rightState;
+        private ValueState<Long> rightStateTimer;
 
         @Override
         public void open(Configuration parameters) throws Exception {
             super.open(parameters);
             // 创建StateTtlConfig
-            StateTtlConfig leftStateTtlConfig = StateTtlConfig
-                    .newBuilder(Time.seconds(10)) // 设置TTL时间为10秒
-                    .setUpdateType(StateTtlConfig.UpdateType.OnCreateAndWrite) // 更新TTL的时间点
-                    .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired) // 过期状态的可见性
-                    .build();
+//            StateTtlConfig leftStateTtlConfig = StateTtlConfig
+//                    .newBuilder(Time.seconds(10)) // 设置TTL时间为10秒
+//                    .setUpdateType(StateTtlConfig.UpdateType.OnCreateAndWrite) // 更新TTL的时间点
+//                    .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired) // 过期状态的可见性
+//                    .build();
             ValueStateDescriptor<Tuple2<String, String>> leftStateDesc = new ValueStateDescriptor<>(
                     "leftState",
                     TypeInformation.of(new TypeHint<Tuple2<String, String>>() {
                     }));
-            leftStateDesc.enableTimeToLive(leftStateTtlConfig);
+//            leftStateDesc.enableTimeToLive(leftStateTtlConfig);
             leftState = getRuntimeContext().getState(leftStateDesc);
             //
             rightState = getRuntimeContext().getState(
@@ -77,20 +77,44 @@ public class Demo04Join {
                             })
                     )
             );
+
+            // 定时器时间戳状态
+            leftStateTimer = getRuntimeContext().getState(
+                    new ValueStateDescriptor<>(
+                            "leftStateTimer",
+                            Long.class
+                    )
+            );
+
+            rightStateTimer = getRuntimeContext().getState(
+                    new ValueStateDescriptor<>(
+                            "rightStateTimer",
+                            Long.class
+                    )
+            );
         }
 
         @Override
         public void processElement1(Tuple2<String, String> value,
                                     KeyedCoProcessFunction<String, Tuple2<String, String>, Tuple2<String, String>, Tuple3<String, String, String>>.Context ctx,
                                     Collector<Tuple3<String, String, String>> out) throws Exception {
+            // 把数据放在状态
+            leftState.update(value);
+            Long oldTimer = leftStateTimer.value();
+            if (oldTimer != null) {
+                ctx.timerService().deleteProcessingTimeTimer(oldTimer);
+            }
+            long timer = ctx.timerService().currentProcessingTime() + 30 * 1000L;
+            leftStateTimer.update(timer);
+            ctx.timerService().registerProcessingTimeTimer(timer);
+
             // 查询右表是否有数据
             Tuple2<String, String> rightRecord = rightState.value();
             if (rightRecord != null) {
                 // 右表有数据 join输出
                 out.collect(Tuple3.of(value.f0, value.f1, rightRecord.f1));
             } else {
-                // 右表没有数据 输出 left null ，把数据放在状态
-                leftState.update(value);
+                // 右表没有数据 输出 left null
                 out.collect(Tuple3.of(value.f0, value.f1, null));
             }
         }
@@ -99,17 +123,39 @@ public class Demo04Join {
         public void processElement2(Tuple2<String, String> value,
                                     KeyedCoProcessFunction<String, Tuple2<String, String>, Tuple2<String, String>, Tuple3<String, String, String>>.Context ctx,
                                     Collector<Tuple3<String, String, String>> out) throws Exception {
+            //  把数据放在状态
+            rightState.update(value);
             // 查询左表是否有数据
             Tuple2<String, String> leftRecord = leftState.value();
             if (leftRecord != null) {
                 // 左表有数据 join输出
                 out.collect(Tuple3.of(value.f0, leftRecord.f1, value.f1));
             } else {
-                // 左表没有数据 输出 null right， 把数据放在状态
-                rightState.update(value);
+                // 左表没有数据 输出 null right，
                 out.collect(Tuple3.of(value.f0, null, value.f1));
             }
 
+        }
+
+
+        @Override
+        public void onTimer(long timestamp,
+                            KeyedCoProcessFunction<String, Tuple2<String, String>, Tuple2<String, String>, Tuple3<String, String, String>>.OnTimerContext ctx,
+                            Collector<Tuple3<String, String, String>> out) throws Exception {
+            System.out.println("定时器触发");
+            if (leftStateTimer.value() != null && leftStateTimer.value().longValue() == timestamp) {
+                System.out.println("左流定时器触发");
+                // 左流的定时器
+                leftState.clear();
+                leftStateTimer.clear();
+            }
+
+            if (rightStateTimer.value() != null && rightStateTimer.value().longValue() == timestamp) {
+                System.out.println("右流定时器触发");
+                // 右流的定时器
+                rightState.clear();
+                rightStateTimer.clear();
+            }
         }
     }
 }
